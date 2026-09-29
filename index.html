@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Block Blast</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(180deg, #4aa8f0 0%, #2f8fe0 45%, #1f6fc0 100%);
+    color: #fff;
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 12px 14px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    overflow: hidden;
+  }
+  /* bintang latar */
+  #bgStars { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+  .twinkle {
+    position: absolute; color: #fff; opacity: .5;
+    animation: tw 2.4s ease-in-out infinite;
+  }
+  @keyframes tw { 0%,100% { opacity: .15; transform: scale(.7);} 50% { opacity: .7; transform: scale(1.1);} }
+
+  header {
+    width: min(94vw, 430px);
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 1;
+  }
+  #bestBox { font-size: 1.25rem; font-weight: 800; color: #ffd166;
+    text-shadow: 0 2px 4px rgba(0,0,0,.35); }
+  #gearBtn {
+    background: rgba(255,255,255,.18); border: none; border-radius: 50%;
+    width: 42px; height: 42px; font-size: 1.3rem; cursor: pointer;
+    backdrop-filter: blur(2px);
+  }
+  #gearBtn:active { transform: rotate(40deg); }
+  #bigScore {
+    font-size: 3rem; font-weight: 900; z-index: 1;
+    text-shadow: 0 3px 0 rgba(0,0,0,.25), 0 6px 14px rgba(0,0,0,.3);
+    margin: 2px 0 8px;
+  }
+
+  #boardWrap { position: relative; width: min(92vw, 420px); z-index: 1; }
+  #boardWrap.shake { animation: shake .32s; }
+  @keyframes shake {
+    0%,100% { transform: translate(0); }
+    25% { transform: translate(-5px, 3px); }
+    50% { transform: translate(5px, -3px); }
+    75% { transform: translate(-3px, -2px); }
+  }
+  #board {
+    position: relative;
+    width: 100%; aspect-ratio: 1;
+    background: rgba(13, 24, 74, .72);
+    border-radius: 14px;
+    padding: 6px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    gap: 4px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 2px 8px rgba(0,0,0,.4);
+  }
+  .cell { background: #26347e; border-radius: 6px; }
+  .b3d {
+    border-radius: 7px;
+    box-shadow:
+      inset 3px 3px 2px rgba(255,255,255,.45),
+      inset -3px -3px 4px rgba(0,0,0,.32),
+      0 2px 5px rgba(0,0,0,.35);
+  }
+  .cell.ghost { opacity: .5; box-shadow: none; }
+  .cell.clearing { animation: clearPop .26s ease forwards; }
+  @keyframes clearPop {
+    0% { transform: scale(1); filter: brightness(1); opacity: 1; }
+    40% { transform: scale(1.15); filter: brightness(2.4); }
+    100% { transform: scale(0); filter: brightness(3); opacity: 0; }
+  }
+
+  #fx { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .beam { position: absolute; animation: beamFade .5s ease forwards; }
+  .beam.h {
+    height: 7px; left: 4px; right: 4px; border-radius: 4px;
+    background: linear-gradient(90deg, transparent, #fff 20%, #fff 80%, transparent);
+    box-shadow: 0 0 22px 7px rgba(255,255,255,.85);
+  }
+  .beam.v {
+    width: 7px; top: 4px; bottom: 4px; border-radius: 4px;
+    background: linear-gradient(180deg, transparent, #fff 20%, #fff 80%, transparent);
+    box-shadow: 0 0 22px 7px rgba(255,255,255,.85);
+  }
+  @keyframes beamFade {
+    0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; }
+  }
+  .spark {
+    position: absolute; font-size: 15px; pointer-events: none;
+    text-shadow: 0 0 10px currentColor;
+  }
+  #popup {
+    position: absolute; top: 38%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2.4rem; font-weight: 900; color: #ffd166;
+    text-shadow: 0 3px 0 rgba(0,0,0,.3), 0 0 18px rgba(255,209,102,.7);
+    opacity: 0; pointer-events: none; z-index: 6;
+  }
+  #popup.show { animation: pop .9s ease-out; }
+  @keyframes pop {
+    0% { opacity: 0; transform: translate(-50%, -30%) scale(.6); }
+    30% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+    100% { opacity: 0; transform: translate(-50%, -120%) scale(1); }
+  }
+
+  #tray {
+    display: flex; gap: 16px; margin-top: 16px; min-height: 108px;
+    align-items: center; justify-content: center; z-index: 1;
+  }
+  .piece { display: grid; gap: 3px; padding: 10px; border-radius: 12px; cursor: grab; touch-action: none; }
+  .piece:active { cursor: grabbing; }
+  .pcell { width: 22px; height: 22px; }
+  .pcell.empty { background: transparent !important; box-shadow: none !important; }
+  #dragEl {
+    position: fixed; z-index: 50; display: grid; gap: 4px;
+    pointer-events: none; transform: translate(-50%, -50%);
+    filter: drop-shadow(0 8px 14px rgba(0,0,0,.5));
+  }
+
+  /* banner gaya komik */
+  #banner {
+    position: fixed; left: 0; right: 0; bottom: 110px;
+    display: flex; justify-content: center;
+    pointer-events: none; z-index: 60; opacity: 0;
+  }
+  #banner.show { animation: bannerIn 1.5s ease forwards; }
+  #banner .ribbon {
+    background: linear-gradient(180deg, #ff6aae, #f43f8e);
+    padding: 8px 36px; border-radius: 8px;
+    transform: rotate(-3deg);
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  }
+  #bannerText {
+    font-size: 2.4rem; font-weight: 900; font-style: italic;
+    color: #fff; letter-spacing: 2px;
+    text-shadow:
+      -2px -2px 0 #831843, 2px -2px 0 #831843,
+      -2px 2px 0 #831843, 2px 2px 0 #831843,
+      0 -2px 0 #831843, 0 2px 0 #831843,
+      -2px 0 0 #831843, 2px 0 0 #831843,
+      4px 4px 0 rgba(0,0,0,.35);
+  }
+  @keyframes bannerIn {
+    0% { opacity: 0; transform: scale(.4) rotate(4deg); }
+    15% { opacity: 1; transform: scale(1.12) rotate(-2deg); }
+    25% { transform: scale(1) rotate(0); }
+    75% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.05) translateY(-14px); }
+  }
+
+  #overlay {
+    position: fixed; inset: 0; background: rgba(8, 14, 44, .88);
+    display: flex; flex-direction: column; gap: 12px;
+    align-items: center; justify-content: center; z-index: 100;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h2 { font-size: 2rem; }
+  #overlay p { color: #bcd2ff; }
+  #overlay button {
+    background: linear-gradient(180deg, #ff6aae, #e94560);
+    color: #fff; border: none; border-radius: 10px;
+    padding: 13px 38px; font-size: 1.05rem; font-weight: 800; cursor: pointer;
+    box-shadow: 0 6px 16px rgba(233,69,96,.5);
+  }
+  .hint { margin-top: 10px; font-size: .78rem; color: rgba(255,255,255,.65); text-align: center; z-index: 1; }
+</style>
+</head>
+<body>
+  <div id="bgStars"></div>
+  <header>
+    <div id="bestBox">👑 <span id="best">0</span></div>
+    <button id="gearBtn" title="Restart">⚙️</button>
+  </header>
+  <div id="bigScore">0</div>
+
+  <div id="boardWrap">
+    <div id="board"></div>
+    <div id="fx"></div>
+    <div id="popup"></div>
+  </div>
+
+  <div id="tray"></div>
+  <div class="hint">Drag blocks onto the board • Fill rows/columns to blast them! 💥</div>
+
+  <div id="banner"><div class="ribbon"><span id="bannerText">AWESOME!</span></div></div>
+
+  <div id="overlay" class="hidden">
+    <h2>💀 Game Over</h2>
+    <p id="finalScore">Score: 0</p>
+    <button id="restartBtn">Play Again</button>
+  </div>
+
+<script>
+const N = 8;
+const boardEl = document.getElementById('board');
+const boardWrap = document.getElementById('boardWrap');
+const trayEl = document.getElementById('tray');
+const bigScoreEl = document.getElementById('bigScore');
+const bestEl = document.getElementById('best');
+const popupEl = document.getElementById('popup');
+const fx = document.getElementById('fx');
+const overlay = document.getElementById('overlay');
+const banner = document.getElementById('banner');
+const bannerText = document.getElementById('bannerText');
+
+const COLORS = ['#a855f7','#3b82f6','#22d3ee','#22c55e','#eab308','#f97316','#ef4444','#ec4899'];
+const SHAPES = [
+  ["#"],
+  ["##"],["#","#"],
+  ["###"],["#","#","#"],
+  ["####"],["#","#","#","#"],
+  ["#####"],["#","#","#","#","#"],
+  ["##","##"],
+  ["###","###"],
+  ["###","###","###"],
+  ["#.","##"],[".#","##"],["##","#."],["##",".#"],
+  ["#..","#..","###"],["..#","..#","###"],
+  ["###","#..","#.."],["###","..#","..#"],
+  ["###",".#."],[".#.","###"],
+  ["#.","##","#."],[".#","##",".#"],
+];
+
+let board, cellEls, tray, score, best = 0, combo = 0, busy = false;
+try { best = parseInt(localStorage.getItem('bb_best') || '0'); } catch(e) {}
+bestEl.textContent = best;
+
+// bintang latar berkelip
+(function(){
+  const w = document.getElementById('bgStars');
+  for (let i = 0; i < 14; i++) {
+    const s = document.createElement('div');
+    s.className = 'twinkle';
+    s.textContent = '✦';
+    s.style.left = Math.random() * 100 + 'vw';
+    s.style.top = Math.random() * 100 + 'vh';
+    s.style.fontSize = (8 + Math.random() * 14) + 'px';
+    s.style.animationDelay = (Math.random() * 2.4) + 's';
+    w.appendChild(s);
+  }
+})();
+
+// --- suara mungil ---
+let actx = null;
+function tone(freq, dur, type, vol, when) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const t = actx.currentTime + (when || 0);
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'triangle'; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol || .12, t);
+    g.gain.exponentialRampToValueAtTime(.001, t + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t); o.stop(t + dur);
+  } catch(e) {}
+}
+const sndPlace = () => tone(520, .09, 'triangle', .1);
+const sndClear = () => [523, 659, 784, 1047].forEach((f, i) => tone(f, .16, 'triangle', .13, i * .07));
+const sndCombo = () => [659, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, .18, 'square', .07, i * .06));
+
+function parseShape(rows) {
+  const cells = [];
+  rows.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '#') cells.push([r, c]); }));
+  return { cells, rows: rows.length, cols: Math.max(...rows.map(r => r.length)) };
+}
+const grad = c => `linear-gradient(135deg, rgba(255,255,255,.38) 0%, rgba(255,255,255,0) 55%), ${c}`;
+
+function buildBoard() {
+  board = Array.from({length: N}, () => Array(N).fill(null));
+  cellEls = [];
+  boardEl.innerHTML = '';
+  for (let r = 0; r < N; r++) {
+    cellEls.push([]);
+    for (let c = 0; c < N; c++) {
+      const d = document.createElement('div');
+      d.className = 'cell';
+      boardEl.appendChild(d);
+      cellEls[r].push(d);
+    }
+  }
+}
+
+function renderBoard() {
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const el = cellEls[r][c];
+    el.className = 'cell';
+    if (board[r][c]) { el.classList.add('b3d'); el.style.background = grad(board[r][c]); }
+    else el.style.background = '';
+  }
+}
+
+function newTray() {
+  tray = [];
+  trayEl.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const shape = parseShape(SHAPES[Math.floor(Math.random() * SHAPES.length)]);
+    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+    const piece = { ...shape, color };
+    tray.push(piece);
+    const el = document.createElement('div');
+    el.className = 'piece';
+    el.style.gridTemplateColumns = `repeat(${shape.cols}, 22px)`;
+    for (let r = 0; r < shape.rows; r++) for (let c = 0; c < shape.cols; c++) {
+      const pc = document.createElement('div');
+      const filled = shape.cells.some(([cr, cc]) => cr === r && cc === c);
+      pc.className = 'pcell' + (filled ? ' b3d' : ' empty');
+      if (filled) pc.style.background = grad(color);
+      el.appendChild(pc);
+    }
+    el.addEventListener('pointerdown', e => startDrag(e, i, el));
+    trayEl.appendChild(el);
+    piece.el = el;
+  }
+}
+
+function canPlace(piece, row, col) {
+  return piece.cells.every(([dr, dc]) => {
+    const r = row + dr, c = col + dc;
+    return r >= 0 && r < N && c >= 0 && c < N && !board[r][c];
+  });
+}
+
+// ---------- drag ----------
+let dragEl = null, dragPiece = null, dragIndex = -1, dragCell = 0, pending = null;
+
+function startDrag(e, index, el) {
+  e.preventDefault();
+  if (busy || !tray[index]) return;
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch(err) {}
+  dragPiece = tray[index];
+  dragIndex = index;
+  el.style.visibility = 'hidden';
+
+  dragCell = boardEl.clientWidth / N;
+  dragEl = document.createElement('div');
+  dragEl.id = 'dragEl';
+  dragEl.style.gridTemplateColumns = `repeat(${dragPiece.cols}, ${dragCell}px)`;
+  for (let r = 0; r < dragPiece.rows; r++) for (let c = 0; c < dragPiece.cols; c++) {
+    const d = document.createElement('div');
+    const filled = dragPiece.cells.some(([cr, cc]) => cr === r && cc === c);
+    d.style.width = d.style.height = (dragCell - 4) + 'px';
+    if (filled) { d.className = 'b3d'; d.style.background = grad(dragPiece.color); }
+    dragEl.appendChild(d);
+  }
+  document.body.appendChild(dragEl);
+  moveDrag(e);
+  window.addEventListener('pointermove', moveDrag);
+  window.addEventListener('pointerup', endDrag, { once: true });
+  window.addEventListener('pointercancel', cancelDrag, { once: true });
+}
+
+function clearGhost() {
+  document.querySelectorAll('.cell.ghost').forEach(el => {
+    el.classList.remove('ghost');
+    el.style.background = '';
+    el.style.opacity = '';
+  });
+  pending = null;
+}
+
+function moveDrag(e) {
+  if (!dragEl) return;
+  dragEl.style.left = e.clientX + 'px';
+  dragEl.style.top = e.clientY + 'px';
+  clearGhost();
+  const rect = boardEl.getBoundingClientRect();
+  const pw = dragPiece.cols * dragCell, ph = dragPiece.rows * dragCell;
+  const col = Math.round((e.clientX - rect.left - pw / 2) / dragCell);
+  const row = Math.round((e.clientY - rect.top - ph / 2) / dragCell);
+  if (canPlace(dragPiece, row, col)) {
+    pending = { row, col };
+    dragPiece.cells.forEach(([dr, dc]) => {
+      const el = cellEls[row + dr][col + dc];
+      el.classList.add('ghost');
+      el.style.background = dragPiece.color;
+    });
+  }
+}
+
+function endDrag() {
+  window.removeEventListener('pointermove', moveDrag);
+  if (pending) commitPlacement(dragPiece, dragIndex, pending.row, pending.col);
+  else if (dragPiece && dragPiece.el) dragPiece.el.style.visibility = 'visible';
+  cleanupDrag();
+}
+function cancelDrag() {
+  window.removeEventListener('pointermove', moveDrag);
+  if (dragPiece && dragPiece.el) dragPiece.el.style.visibility = 'visible';
+  cleanupDrag();
+}
+function cleanupDrag() {
+  clearGhost();
+  if (dragEl) { dragEl.remove(); dragEl = null; }
+  dragPiece = null; dragIndex = -1;
+}
+
+// ---------- efek ----------
+function beamRow(r) {
+  const cell = cellEls[r][0];
+  const b = document.createElement('div');
+  b.className = 'beam h';
+  b.style.top = (cell.offsetTop + cell.offsetHeight / 2 - 3) + 'px';
+  fx.appendChild(b);
+  setTimeout(() => b.remove(), 550);
+}
+function beamCol(c) {
+  const cell = cellEls[0][c];
+  const b = document.createElement('div');
+  b.className = 'beam v';
+  b.style.left = (cell.offsetLeft + cell.offsetWidth / 2 - 3) + 'px';
+  fx.appendChild(b);
+  setTimeout(() => b.remove(), 550);
+}
+function burst(x, y, color) {
+  for (let i = 0; i < 5; i++) {
+    const s = document.createElement('div');
+    s.className = 'spark';
+    s.textContent = '✦';
+    s.style.left = x + 'px';
+    s.style.top = y + 'px';
+    s.style.color = Math.random() < .45 ? '#ffffff' : (color || '#ffd166');
+    s.style.fontSize = (10 + Math.random() * 12) + 'px';
+    fx.appendChild(s);
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 34 + Math.random() * 80;
+    const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist - 24;
+    s.animate([
+      { transform: 'translate(-50%,-50%) scale(1) rotate(0deg)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0) rotate(200deg)`, opacity: 0 }
+    ], { duration: 550 + Math.random() * 450, easing: 'cubic-bezier(.2,.7,.3,1)' }).onfinish = () => s.remove();
+  }
+}
+function popup(text) {
+  popupEl.textContent = text;
+  popupEl.classList.remove('show');
+  void popupEl.offsetWidth;
+  popupEl.classList.add('show');
+}
+function showBanner(text) {
+  bannerText.textContent = text;
+  banner.classList.remove('show');
+  void banner.offsetWidth;
+  banner.classList.add('show');
+}
+function doShake() {
+  boardWrap.classList.remove('shake');
+  void boardWrap.offsetWidth;
+  boardWrap.classList.add('shake');
+}
+
+// ---------- logika game ----------
+function commitPlacement(piece, index, row, col) {
+  busy = true;
+  piece.cells.forEach(([dr, dc]) => { board[row + dr][col + dc] = piece.color; });
+  tray[index] = null;
+  score += piece.cells.length * 10;
+  bigScoreEl.textContent = score;
+  renderBoard();
+  sndPlace();
+
+  const rows = [], cols = [];
+  for (let r = 0; r < N; r++) if (board[r].every(v => v)) rows.push(r);
+  for (let c = 0; c < N; c++) if (board.every(rr => rr[c])) cols.push(c);
+  const total = rows.length + cols.length;
+
+  const finish = () => {
+    busy = false;
+    if (tray.every(p => !p)) newTray();
+    if (!anyMovePossible()) gameOver();
+  };
+
+  if (total > 0) {
+    combo++;
+    // kilatan + sinar + partikel
+    rows.forEach(r => {
+      for (let c = 0; c < N; c++) {
+        cellEls[r][c].classList.add('clearing');
+        const el = cellEls[r][c];
+        burst(el.offsetLeft + el.offsetWidth / 2, el.offsetTop + el.offsetHeight / 2, board[r][c]);
+      }
+      beamRow(r);
+    });
+    cols.forEach(c => {
+      for (let r = 0; r < N; r++) {
+        if (!cellEls[r][c].classList.contains('clearing')) {
+          cellEls[r][c].classList.add('clearing');
+          const el = cellEls[r][c];
+          burst(el.offsetLeft + el.offsetWidth / 2, el.offsetTop + el.offsetHeight / 2, board[r][c]);
+        }
+      }
+      beamCol(c);
+    });
+    if (total >= 2 || combo >= 2) doShake();
+    if (combo >= 2) sndCombo(); else sndClear();
+
+    // banner sesuai pencapaian
+    let word = 'NICE!';
+    if (total >= 4) word = 'UNSTOPPABLE!';
+    else if (total === 3) word = 'AWESOME!';
+    else if (total === 2) word = 'GREAT!';
+    if (combo >= 3) word = 'COMBO x' + combo + '!';
+    else if (combo === 2 && total < 2) word = 'COMBO x2!';
+    showBanner(word);
+
+    const bonus = total * 100 * total + (combo >= 2 ? combo * 50 : 0);
+    setTimeout(() => {
+      rows.forEach(r => { for (let c = 0; c < N; c++) board[r][c] = null; });
+      cols.forEach(c => { for (let r = 0; r < N; r++) board[r][c] = null; });
+      renderBoard();
+      score += bonus;
+      bigScoreEl.textContent = score;
+      popup('+' + bonus);
+      finish();
+    }, 280);
+  } else {
+    combo = 0;
+    finish();
+  }
+}
+
+function anyMovePossible() {
+  for (const piece of tray) {
+    if (!piece) continue;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++)
+      if (canPlace(piece, r, c)) return true;
+  }
+  return false;
+}
+
+function gameOver() {
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem('bb_best', String(best)); } catch(e) {}
+    bestEl.textContent = best;
+  }
+  document.getElementById('finalScore').textContent = 'Score: ' + score + '  •  Best: ' + best;
+  overlay.classList.remove('hidden');
+}
+
+function start() {
+  score = 0; combo = 0; busy = false;
+  bigScoreEl.textContent = '0';
+  overlay.classList.add('hidden');
+  buildBoard();
+  newTray();
+}
+
+document.getElementById('restartBtn').addEventListener('click', start);
+document.getElementById('gearBtn').addEventListener('click', start);
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+start();
+</script>
+</body>
+</html>
